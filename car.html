@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<title>لعبة السيارة</title>
+<style>
+  body {
+    margin: 0;
+    background: skyblue;
+    font-family: Arial, sans-serif;
+  }
+
+  .info {
+    text-align: center;
+    padding: 10px;
+    color: #123;
+    font-size: 18px;
+  }
+
+  .road {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    background: #444;
+    overflow: hidden;
+  }
+
+  .lines {
+    position: absolute;
+    top: 197px;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background-image: repeating-linear-gradient(
+      to right,
+      white 0,
+      white 60px,
+      transparent 60px,
+      transparent 120px
+    );
+    background-size: 120px 6px;
+    background-repeat: repeat-x;
+  }
+
+  .edge {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background: yellow;
+  }
+  .edge.top { top: 0; }
+  .edge.bottom { bottom: 0; }
+
+  .car {
+    position: absolute;
+    top: 65px;
+    left: 40%;
+    width: 180px;
+    height: 100px;
+    z-index: 10;
+  }
+
+  .body {
+    position: absolute;
+    bottom: 15px;
+    left: 0;
+    width: 180px;
+    height: 45px;
+    background: red;
+    border-radius: 15px 25px 8px 8px;
+  }
+
+  .window {
+    position: absolute;
+    top: 10px;
+    left: 55px;
+    width: 70px;
+    height: 30px;
+    background: lightblue;
+    border: 3px solid #333;
+    border-radius: 10px 10px 0 0;
+    box-sizing: border-box;
+  }
+
+  .wheel {
+    position: absolute;
+    bottom: 0;
+    width: 35px;
+    height: 35px;
+    background: black;
+    border: 3px solid #777;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .wheel.back  { left: 25px; }
+  .wheel.front { left: 120px; }
+
+  /* الحواجز */
+  .obstacle {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background: repeating-linear-gradient(
+      45deg, orange 0, orange 10px, #222 10px, #222 20px
+    );
+    border: 3px solid #fff;
+    border-radius: 6px;
+    box-sizing: border-box;
+    z-index: 5;
+  }
+
+  .controls {
+    text-align: center;
+    margin-top: 15px;
+  }
+  .controls button {
+    width: 90px;
+    height: 50px;
+    font-size: 24px;
+    margin: 3px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* شاشة الخسارة */
+  #gameOver {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: white;
+    text-align: center;
+  }
+  #gameOver h1 {
+    font-size: 48px;
+    margin: 0 0 10px;
+    color: #ff5252;
+  }
+  #gameOver p {
+    font-size: 22px;
+    margin: 0 0 25px;
+  }
+  #gameOver button {
+    font-size: 22px;
+    padding: 12px 30px;
+    margin: 6px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #restartBtn { background: #4caf50; color: white; }
+  #exitBtn { background: #e53935; color: white; }
+</style>
+<link rel="manifest" href="./manifest.json">
+</head>
+<body>
+
+  <div class="info">
+    اضغط ⬆ ⬇ أو W S للتحكم | النتيجة: <span id="scoreText">0</span>
+  </div>
+
+  <div class="road" id="road">
+    <div class="edge top"></div>
+    <div class="edge bottom"></div>
+    <div class="lines" id="lines"></div>
+
+    <div class="car" id="car">
+      <div class="body"></div>
+      <div class="window"></div>
+      <div class="wheel back"></div>
+      <div class="wheel front"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btnUp">⬆</button>
+    <button id="btnDown">⬇</button>
+  </div>
+
+  <div id="gameOver">
+    <h1>خسرت! 💥</h1>
+    <p>النتيجة: <span id="finalScore">0</span></p>
+    <div>
+      <button id="restartBtn">إعادة</button>
+      <button id="exitBtn">خروج</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var car = document.getElementById("car");
+  var road = document.getElementById("road");
+  var lines = document.getElementById("lines");
+  var scoreText = document.getElementById("scoreText");
+  var finalScore = document.getElementById("finalScore");
+  var gameOverBox = document.getElementById("gameOver");
+
+  var carTop, offset, score, obstacles, spawnTimer, running;
+  var up = false;
+  var down = false;
+
+  var roadSpeed = 8;     // سرعة الطريق والحواجز
+  var speedY = 5;        // سرعة الصعود والنزول
+  var spawnEvery = 70;   // كل كم إطار يطلع حاجز (قلّلها لحواجز أكثر)
+
+  function resetGame() {
+    // مسح الحواجز القديمة
+    if (obstacles) {
+      obstacles.forEach(function (o) { o.el.remove(); });
+    }
+    obstacles = [];
+    carTop = 65;
+    offset = 0;
+    score = 0;
+    spawnTimer = 0;
+    running = true;
+    gameOverBox.style.display = "none";
+    scoreText.textContent = "0";
+    car.style.top = carTop + "px";
+  }
+
+  function spawnObstacle() {
+    var el = document.createElement("div");
+    el.className = "obstacle";
+    var size = 40 + Math.floor(Math.random() * 25);   // حجم عشوائي
+    el.style.width = size + "px";
+    el.style.height = size + "px";
+
+    var minTop = 10;
+    var maxTop = road.clientHeight - size - 10;
+    var top = minTop + Math.random() * (maxTop - minTop);   // مكان عشوائي
+
+    var left = road.clientWidth + 20;
+    el.style.top = top + "px";
+    el.style.left = left + "px";
+    road.appendChild(el);
+
+    obstacles.push({ el: el, left: left, top: top, size: size });
+  }
+
+  function hit(o) {
+    // مستطيل السيارة (أصغر قليلًا من الصورة حتى يكون التصادم عادل)
+    var carLeft = car.offsetLeft + 5;
+    var carRight = car.offsetLeft + car.offsetWidth - 5;
+    var carTopPos = carTop + 20;
+    var carBottom = carTop + car.offsetHeight - 5;
+
+    return (
+      o.left < carRight &&
+      o.left + o.size > carLeft &&
+      o.top < carBottom &&
+      o.top + o.size > carTopPos
+    );
+  }
+
+  function gameOver() {
+    running = false;
+    finalScore.textContent = Math.floor(score);
+    gameOverBox.style.display = "flex";
+  }
+
+  // التحكم
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "ArrowUp" || e.code === "KeyW") { up = true; e.preventDefault(); }
+    if (e.code === "ArrowDown" || e.code === "KeyS") { down = true; e.preventDefault(); }
+  });
+  document.addEventListener("keyup", function (e) {
+    if (e.code === "ArrowUp" || e.code === "KeyW") up = false;
+    if (e.code === "ArrowDown" || e.code === "KeyS") down = false;
+  });
+
+  function hold(btnId, setter) {
+    var b = document.getElementById(btnId);
+    b.addEventListener("pointerdown", function () { setter(true); });
+    b.addEventListener("pointerup", function () { setter(false); });
+    b.addEventListener("pointerleave", function () { setter(false); });
+  }
+  hold("btnUp", function (v) { up = v; });
+  hold("btnDown", function (v) { down = v; });
+
+  // الأزرار
+  document.getElementById("restartBtn").addEventListener("click", resetGame);
+  document.getElementById("exitBtn").addEventListener("click", function () {
+    window.close();   // يشتغل إذا الصفحة انفتحت بسكربت
+    // إذا المتصفح منع الإغلاق، نعرض شاشة نهاية
+    document.body.innerHTML =
+      '<div style="text-align:center;margin-top:120px;font-size:32px;color:#123;">' +
+      'شكرًا للعب 👋<br><small style="font-size:18px">تقدر تسكر هذي التبويبة</small></div>';
+  });
+
+  function loop() {
+    if (running) {
+      // الطريق يتحرك
+      offset -= roadSpeed;
+      lines.style.backgroundPosition = offset + "px 0";
+
+      // تحكم فوق وتحت
+      if (up) carTop -= speedY;
+      if (down) carTop += speedY;
+      var maxCarTop = road.clientHeight - car.offsetHeight;
+      carTop = Math.max(0, Math.min(carTop, maxCarTop));
+      car.style.top = carTop + "px";
+
+      // ظهور حواجز عشوائية
+      spawnTimer++;
+      if (spawnTimer >= spawnEvery * (0.6 + Math.random() * 0.8)) {
+        spawnObstacle();
+        spawnTimer = 0;
+      }
+
+      // تحريك الحواجز وفحص الاصطدام
+      for (var i = obstacles.length - 1; i >= 0; i--) {
+        var o = obstacles[i];
+        o.left -= roadSpeed;
+        o.el.style.left = o.left + "px";
+
+        if (hit(o)) {
+          gameOver();
+          break;
+        }
+
+        if (o.left + o.size < -10) {
+          o.el.remove();
+          obstacles.splice(i, 1);
+        }
+      }
+
+      // النتيجة
+      score += 0.1;
+      scoreText.textContent = Math.floor(score);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  resetGame();
+  loop();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./service-worker.js")
+      .then(() => console.log("Offline support enabled"))
+      .catch(error => console.error("Service Worker error:", error));
+  });
+}
+</script>
+</body>
+</html>

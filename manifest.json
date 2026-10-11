@@ -1,0 +1,15 @@
+{
+  "name": "Car App",
+
+
+  "short_name": "Car",
+
+
+  "start_nrl": "./car.html",
+
+
+  "display": "standalone",
+  "background_color": "#87CEEB",
+  "theme_color": "#87CEED",
+}
+  
